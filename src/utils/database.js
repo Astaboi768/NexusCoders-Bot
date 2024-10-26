@@ -4,14 +4,21 @@ const logger = require('./logger');
 
 async function connectToDatabase() {
     try {
-        await mongoose.connect(config.mongoUri, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
+        mongoose.set('strictQuery', false);
+        await mongoose.connect(config.database.uri, {
+            ...config.database.options,
+            dbName: 'nexusbot',
+            retryWrites: true,
+            w: 'majority'
         });
         logger.info('Connected to MongoDB');
     } catch (error) {
         logger.error('MongoDB connection error:', error);
-        process.exit(1);
+        if (error.name === 'MongoParseError') {
+            logger.error('Invalid MongoDB connection string');
+            process.exit(1);
+        }
+        setTimeout(connectToDatabase, 5000);
     }
 }
 
@@ -22,6 +29,20 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('error', (err) => {
     logger.error('MongoDB error:', err);
+    if (mongoose.connection.readyState !== 1) {
+        setTimeout(connectToDatabase, 5000);
+    }
+});
+
+process.on('SIGINT', async () => {
+    try {
+        await mongoose.connection.close();
+        logger.info('MongoDB connection closed through app termination');
+        process.exit(0);
+    } catch (err) {
+        logger.error('Error closing MongoDB connection:', err);
+        process.exit(1);
+    }
 });
 
 module.exports = {

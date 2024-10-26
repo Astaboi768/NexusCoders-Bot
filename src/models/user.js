@@ -6,20 +6,11 @@ const userSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    name: String,
-    isAdmin: {
-        type: Boolean,
-        default: false
+    name: {
+        type: String,
+        required: true
     },
-    isBanned: {
-        type: Boolean,
-        default: false
-    },
-    warns: {
-        type: Number,
-        default: 0
-    },
-    xp: {
+    experience: {
         type: Number,
         default: 0
     },
@@ -27,23 +18,115 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 1
     },
-    lastCommandUsed: Date,
-    joinedAt: {
+    warns: {
+        type: Number,
+        default: 0
+    },
+    isBanned: {
+        type: Boolean,
+        default: false
+    },
+    isAdmin: {
+        type: Boolean,
+        default: false
+    },
+    isPremium: {
+        type: Boolean,
+        default: false
+    },
+    lastDaily: Date,
+    balance: {
+        type: Number,
+        default: 0
+    },
+    inventory: [{
+        item: String,
+        quantity: Number
+    }],
+    achievements: [{
+        name: String,
+        unlockedAt: Date
+    }],
+    settings: {
+        notifications: {
+            type: Boolean,
+            default: true
+        },
+        language: {
+            type: String,
+            default: 'en'
+        }
+    },
+    statistics: {
+        commandsUsed: {
+            type: Number,
+            default: 0
+        },
+        messagesReceived: {
+            type: Number,
+            default: 0
+        },
+        messagesSent: {
+            type: Number,
+            default: 0
+        }
+    },
+    lastCommandTime: Date,
+    createdAt: {
         type: Date,
         default: Date.now
-    }
-}, {
-    timestamps: true
+    },
+    updatedAt: Date
 });
 
-userSchema.methods.addXP = async function(amount) {
-    this.xp += amount;
-    const nextLevel = Math.floor(0.1 * Math.sqrt(this.xp));
-    if (nextLevel > this.level) {
+userSchema.pre('save', function(next) {
+    this.updatedAt = new Date();
+    next();
+});
+
+userSchema.methods.addExperience = async function(amount) {
+    this.experience += amount;
+    const nextLevel = Math.floor(0.1 * Math.sqrt(this.experience));
+    const didLevelUp = nextLevel > this.level;
+    if (didLevelUp) {
         this.level = nextLevel;
     }
     await this.save();
-    return this.level;
+    return didLevelUp;
 };
 
-module.exports = mongoose.model('User', userSchema);
+userSchema.methods.addBalance = async function(amount) {
+    this.balance += amount;
+    await this.save();
+    return this.balance;
+};
+
+userSchema.methods.warn = async function() {
+    this.warns += 1;
+    await this.save();
+    return this.warns;
+};
+
+userSchema.methods.clearWarns = async function() {
+    this.warns = 0;
+    await this.save();
+};
+
+userSchema.methods.ban = async function() {
+    this.isBanned = true;
+    await this.save();
+};
+
+userSchema.methods.unban = async function() {
+    this.isBanned = false;
+    await this.save();
+};
+
+userSchema.methods.setPremium = async function(status) {
+    this.isPremium = status;
+    await this.save();
+};
+
+const User = mongoose.model('User', userSchema);
+
+module.exports = User;

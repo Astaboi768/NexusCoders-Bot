@@ -1,36 +1,92 @@
-const config = require('../config');
-const { handleCommand } = require('./commandHandler');
-const User = require('../models/user');
 const logger = require('../utils/logger');
+const config = require('../config');
+const { executeCommand } = require('./commandHandler');
 
-async function messageHandler(sock, msg) {
+async function handleMessage(sock, message) {
     try {
-        if (!msg.message || msg.key.fromMe) return;
+        if (!message.message) return;
+
+        const messageType = Object.keys(message.message)[0];
         
-        const messageType = Object.keys(msg.message)[0];
-        if (messageType === 'protocolMessage' || messageType === 'senderKeyDistributionMessage') return;
-
-        const content = msg.message?.conversation || 
-                       msg.message?.extendedTextMessage?.text || 
-                       msg.message?.imageMessage?.caption ||
-                       msg.message?.videoMessage?.caption;
-                       
-        if (!content) return;
-
-        if (config.autoRead) {
-            await sock.readMessages([msg.key]);
+        let messageText;
+        if (messageType === 'conversation') {
+            messageText = message.message.conversation;
+        } else if (messageType === 'extendedTextMessage') {
+            messageText = message.message.extendedTextMessage.text;
+        } else if (messageType === 'imageMessage') {
+            messageText = message.message.imageMessage.caption;
+        } else if (messageType === 'videoMessage') {
+            messageText = message.message.videoMessage.caption;
         }
 
-        if (!content.startsWith(config.prefix)) return;
+        if (!messageText?.startsWith(config.bot.prefix)) return;
 
-        const [cmd, ...args] = content.slice(config.prefix.length).trim().split(/\s+/);
-        if (!cmd) return;
-
-        await handleCommand(sock, msg, args, cmd.toLowerCase());
-
+        const [command, ...args] = messageText.slice(config.bot.prefix.length).trim().split(' ');
+        await executeCommand(sock, message, command.toLowerCase(), args);
     } catch (error) {
         logger.error('Error in message handler:', error);
     }
 }
 
-module.exports = messageHandler;
+async function handleGroupParticipantsUpdate(sock, update) {
+    const { id, participants, action } = update;
+
+    try {
+        const groupMetadata = await sock.groupMetadata(id);
+
+        for (const participant of participants) {
+            const user = participant.split('@')[0];
+            let message = '';
+
+            switch (action) {
+                case 'add':
+                    message = `Welcome @${user} to ${groupMetadata.subject}! 🎉`;
+                    break;
+                case 'remove':
+                    message = `Goodbye @${user}! 👋`;
+                    break;
+                case 'promote':
+                    message = `@${user} has been promoted to admin! 🎊`;
+                    break;
+                case 'demote':
+                    message = `@${user} has been demoted! 📉`;
+                    break;
+            }
+
+            if (message) {
+                await sock.sendMessage(id, {
+                    text: message,
+                    mentions: [participant]
+                });
+            }
+        }
+    } catch (error) {
+        logger.error('Error in group handler:', error);
+    }
+}
+
+async function handleGroupUpdate(sock, update) {
+    const { id, subject, desc } = update;
+
+    try {
+        if (subject) {
+            await sock.sendMessage(id, {
+                text: `Group name changed to: ${subject}`
+            });
+        }
+
+        if (desc) {
+            await sock.sendMessage(id, {
+                text: `Group description updated!`
+            });
+        }
+    } catch (error) {
+        logger.error('Error in group update handler:', error);
+    }
+}
+
+module.exports = {
+    handleMessage,
+    handleGroupParticipantsUpdate,
+    handleGroupUpdate
+};

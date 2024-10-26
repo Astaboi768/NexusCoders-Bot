@@ -1,45 +1,19 @@
-const config = require('../../config');
-
 module.exports = {
     name: 'broadcast',
-    description: 'Broadcast a message to all chats',
+    description: 'Broadcast a message to all groups',
     usage: '!broadcast <message>',
     category: 'owner',
     ownerOnly: true,
-    
-    async execute(sock, msg, args) {
-        if (args.length < 1) {
-            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Please provide a message to broadcast!' });
-            return;
+    async execute(sock, message, args) {
+        if (!args.length) return await sock.sendMessage(message.key.remoteJid, { text: 'Please provide a message to broadcast' });
+        
+        const broadcastMessage = args.join(' ');
+        const groups = await sock.groupFetchAllParticipating();
+        
+        for (let group of Object.values(groups)) {
+            await sock.sendMessage(group.id, { text: broadcastMessage });
         }
-
-        const message = args.join(' ');
-        const broadcastMessage = `*[BROADCAST MESSAGE]*\n\n${message}\n\n_This is a broadcast message from the bot owner._`;
-
-        try {
-            const chats = await sock.groupFetchAllParticipating();
-            let successCount = 0;
-            let failCount = 0;
-
-            for (const [jid] of Object.entries(chats)) {
-                try {
-                    await sock.sendMessage(jid, { text: broadcastMessage });
-                    successCount++;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch {
-                    failCount++;
-                }
-            }
-
-            const summary = `📢 Broadcast Summary\n\n` +
-                          `✅ Successfully sent: ${successCount}\n` +
-                          `❌ Failed: ${failCount}\n` +
-                          `📝 Message: ${message.substring(0, 50)}...`;
-
-            await sock.sendMessage(msg.key.remoteJid, { text: summary });
-
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, { text: config.messages.error });
-        }
+        
+        await sock.sendMessage(message.key.remoteJid, { text: 'Broadcast sent successfully!' });
     }
 };

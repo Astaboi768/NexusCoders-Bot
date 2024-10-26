@@ -1,5 +1,4 @@
 const User = require('../../models/user');
-const config = require('../../config');
 
 module.exports = {
     name: 'ban',
@@ -7,40 +6,45 @@ module.exports = {
     usage: '!ban @user [reason]',
     category: 'admin',
     adminOnly: true,
-    
-    async execute(sock, msg, args) {
-        const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid;
+    async execute(sock, message, args) {
+        const mentions = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
         
-        if (!mentioned || !mentioned[0]) {
-            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Please mention a user to ban!' });
+        if (mentions.length === 0) {
+            await sock.sendMessage(message.key.remoteJid, {
+                text: '❌ Please mention a user to ban'
+            });
             return;
         }
 
-        const targetUser = mentioned[0];
+        const targetId = mentions[0];
         const reason = args.slice(1).join(' ') || 'No reason provided';
+        
+        const user = await User.findOne({ jid: targetId });
+        if (!user) {
+            await sock.sendMessage(message.key.remoteJid, {
+                text: '❌ User not found in database'
+            });
+            return;
+        }
+
+        if (user.isAdmin) {
+            await sock.sendMessage(message.key.remoteJid, {
+                text: '❌ Cannot ban an admin'
+            });
+            return;
+        }
+
+        await user.ban();
+        
+        await sock.sendMessage(message.key.remoteJid, {
+            text: `✅ Banned user @${targetId.split('@')[0]}\nReason: ${reason}`,
+            mentions: [targetId]
+        });
 
         try {
-            let user = await User.findOne({ jid: targetUser });
-            
-            if (!user) {
-                user = new User({ jid: targetUser });
-            }
-
-            if (user.isBanned) {
-                await sock.sendMessage(msg.key.remoteJid, { text: '❌ User is already banned!' });
-                return;
-            }
-
-            user.isBanned = true;
-            await user.save();
-
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ User @${targetUser.split('@')[0]} has been banned!\nReason: ${reason}`,
-                mentions: [targetUser]
+            await sock.sendMessage(targetId, {
+                text: `You have been banned from using the bot.\nReason: ${reason}`
             });
-
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, { text: config.messages.error });
-        }
+        } catch (error) {}
     }
 };

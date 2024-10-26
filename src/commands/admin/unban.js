@@ -1,41 +1,35 @@
-const User = require('../../models/user');
-const config = require('../../config');
-
 module.exports = {
-    name: 'unban',
-    description: 'Unban a user from using the bot',
-    usage: '!unban @user',
+    name: 'ban',
+    description: 'Ban a user from using the bot',
+    usage: '!ban @user [reason]',
     category: 'admin',
     adminOnly: true,
-    
-    async execute(sock, msg, args) {
-        const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid;
+    async execute(sock, message, args) {
+        const User = require('../../models/user');
         
-        if (!mentioned || !mentioned[0]) {
-            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Please mention a user to unban!' });
+        const mentioned = message.message.extendedTextMessage?.contextInfo?.mentionedJid[0];
+        if (!mentioned) {
+            await sock.sendMessage(message.key.remoteJid, { text: '❌ Please mention a user to ban' });
             return;
         }
 
-        const targetUser = mentioned[0];
-
-        try {
-            const user = await User.findOne({ jid: targetUser });
-            
-            if (!user || !user.isBanned) {
-                await sock.sendMessage(msg.key.remoteJid, { text: '❌ User is not banned!' });
-                return;
-            }
-
-            user.isBanned = false;
-            await user.save();
-
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: `✅ User @${targetUser.split('@')[0]} has been unbanned!`,
-                mentions: [targetUser]
-            });
-
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, { text: config.messages.error });
+        const user = await User.findOne({ jid: mentioned });
+        if (!user) {
+            await sock.sendMessage(message.key.remoteJid, { text: '❌ User not found in database' });
+            return;
         }
+
+        if (user.isAdmin) {
+            await sock.sendMessage(message.key.remoteJid, { text: '❌ Cannot ban an admin' });
+            return;
+        }
+
+        user.isBanned = true;
+        user.banReason = args.slice(1).join(' ') || 'No reason provided';
+        await user.save();
+
+        await sock.sendMessage(message.key.remoteJid, { 
+            text: `✅ Successfully banned ${user.name}\nReason: ${user.banReason}` 
+        });
     }
 };
