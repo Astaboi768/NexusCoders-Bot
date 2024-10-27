@@ -24,10 +24,10 @@ module.exports = {
         try {
             const prompt = args.join(' ');
             const encodedPrompt = encodeURIComponent(prompt);
-            const response = await axios.get(`https://apitoxxictechinc.vercel.app/api/chat?text=${encodedPrompt}&apikey=nexusteam`);
+            const response = await axios.get(`https://api-toxxictechinc.onrender.com/api/chat?question=${encodedPrompt}&apikey=nexusteam`);
 
-            if (response.data && response.data.answer) {
-                const aiResponse = `🤖 *Nexus AI Response:*\n\n${response.data.answer}`;
+            if (response.data && response.data.data && response.data.data.response) {
+                const aiResponse = `🤖 *Nexus AI Response:*\n\n${response.data.data.response}`;
 
                 await sock.sendMessage(message.key.remoteJid, {
                     text: aiResponse,
@@ -43,4 +43,4 @@ module.exports = {
             });
         }
     }
-}
+                }
